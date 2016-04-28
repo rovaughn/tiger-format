@@ -23,6 +23,16 @@ func ToByte(f float64) byte {
 	}
 }
 
+func PickN(dx int, dy int) int {
+	n := 1
+
+	for n < dx || n < dy {
+		n *= 2
+	}
+
+	return n
+}
+
 func Decode(r io.Reader) (image.Image, error) {
 	header := make([]byte, 3+2+2)
 
@@ -37,11 +47,7 @@ func Decode(r io.Reader) (image.Image, error) {
 	dx := int(binary.LittleEndian.Uint16(header[3:5]))
 	dy := int(binary.LittleEndian.Uint16(header[5:7]))
 
-	if dx != dy {
-		return nil, fmt.Errorf("Only square images supported at this time: dimensions are %d x %d", dx, dy)
-	}
-
-	n := dx
+	n := PickN(dx, dy)
 
 	m := &image.RGBA{
 		Pix:    make([]uint8, 4*dx*dy),
@@ -57,6 +63,15 @@ func Decode(r io.Reader) (image.Image, error) {
 	}
 
 	for d := 0; d < n*n; d++ {
+		x, y, err := space.Map(d)
+		if err != nil {
+			return nil, err
+		}
+
+		if x >= dx || y >= dy {
+			continue
+		}
+
 		if _, err := io.ReadFull(r, buf); err != nil {
 			return nil, err
 		}
@@ -66,11 +81,6 @@ func Decode(r io.Reader) (image.Image, error) {
 			float64(buf[1])/255*2-1,
 			float64(buf[2])/255*2-1,
 		)
-
-		x, y, err := space.Map(d)
-		if err != nil {
-			return nil, err
-		}
 
 		a := buf[3]
 
@@ -86,11 +96,7 @@ func Decode(r io.Reader) (image.Image, error) {
 func Encode(w io.Writer, m image.Image) error {
 	bounds := m.Bounds()
 
-	if bounds.Dx() != bounds.Dy() {
-		return fmt.Errorf("Only square images supported at this time, dimensions are %d, %d", bounds.Dx(), bounds.Dy())
-	}
-
-	n := bounds.Dx()
+	n := PickN(bounds.Dx(), bounds.Dy())
 
 	header := make([]byte, 3+2+2)
 
@@ -120,6 +126,10 @@ func Encode(w io.Writer, m image.Image) error {
 
 		x += bounds.Min.X
 		y += bounds.Min.Y
+
+		if x >= bounds.Max.X || y >= bounds.Max.Y {
+			continue
+		}
 
 		r, g, b, a := m.At(x, y).RGBA()
 
