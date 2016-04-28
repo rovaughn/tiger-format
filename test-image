@@ -1,0 +1,37 @@
+#!/bin/sh -ue
+
+input_image=$1
+tiger_image=${input_image}.tgr
+output_image=${tiger_image}.png
+xz_image=${tiger_image}.xz
+bz2_image=${tiger_image}.bz2
+
+echo "Encoding..."
+pv $input_image | ./tiger encode >$tiger_image
+
+echo "Decoding..."
+pv $tiger_image | ./tiger decode >$output_image
+
+echo "Compressing with XZ..."
+pv $tiger_image | xz -9kf >$xz_image
+
+echo "Compressing with Bzip2..."
+pv $tiger_image | bzip2 -9kf $tiger_image >$bz2_image
+
+human() {
+    numfmt --to=iec-i --suffix=B
+}
+
+compare() {
+    echo "100 - ((100 * $2) / $1)" | bc
+}
+
+input_size=$(stat -c '%s' $input_image)
+xz_size=$(stat -c '%s' $xz_image)
+bz2_size=$(stat -c '%s' $bz2_image)
+
+echo "Input ($input_image): $(echo $input_size | human)"
+echo "XZ ($xz_image): $(echo $xz_size | human) ($(compare $input_size $xz_size)% smaller)"
+echo "Bzip2 ($bz2_image): $(echo $bz2_size | human) ($(compare $input_size $bz2_size)% smaller)"
+echo "Output: $output_image"
+
